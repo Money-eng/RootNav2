@@ -222,7 +222,7 @@ class ModelLoader():
             sys.stdout.flush()
             model = hg()
             if gpu:
-                state = convert_state_dict(torch.load(weights_file)['model_state'])
+                state = convert_state_dict(torch.load(weights_file, weights_only=False)['model_state'])
             else:
                 state = convert_state_dict(torch.load(weights_file, map_location='cpu')['model_state'])
             model.load_state_dict(state)

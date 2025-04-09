@@ -18,7 +18,7 @@ from rootnav2.metrics import runningScore, averageMeter
 from rootnav2.schedulers import get_scheduler
 from rootnav2.optimizers import get_optimizer
 from PIL import Image
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import logging
 
 # Class weights
