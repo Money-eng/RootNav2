@@ -6,3 +6,6 @@ inference/models/*.pth
 training/runs/*
 *.pyc
 *.pt
+
+exploded_data/
+data/
