@@ -3,12 +3,10 @@ import numpy as np
 from PIL import Image
 import os
 import xml.etree.ElementTree
-from PIL import Image
 from glob import glob
 import matplotlib.pyplot as plt
 import cv2
 plt.ion()  # interactive mode
-from PIL import Image
 import torch
 import math
 import torch.nn as nn
@@ -53,17 +51,6 @@ def im_to_torch(img):
     img = to_torch(img).float()
     if img.max() > 1:
         img /= 255
-    return img
-
-def resize(img, owidth, oheight):
-    img = im_to_numpy(img)
-    print('%f %f' % (img.min(), img.max()))
-    img = scipy.misc.imresize(
-            img,
-            (oheight, owidth)
-        )
-    img = im_to_torch(img)
-    print('%f %f' % (img.min(), img.max()))
     return img
 
 # Gaussian Drawing
@@ -174,17 +161,19 @@ class rootsLoader(data.Dataset):
         # Create mask image
         mask = np.zeros((source_height,source_width), dtype=np.uint8)
 
-        # Regression points
         for plant in plants:
-            seeds.append(plant.seed)
+            if plant.seed:
+                seeds.append(plant.seed)
+                cv2.circle(mask, int_t((plant.seed)), 10, (5), -1)
+
             for r in plant.primary_roots():
-                primary_tips.append(r.end)
+                if r.end:
+                    primary_tips.append(r.end)
             
             for r in plant.lateral_roots():
-                lateral_tips.append(r.end)
+                if r.end:
+                    lateral_tips.append(r.end)
 
-            # DRAW SEED ON MASK
-            cv2.circle(mask, int_t((plant.seed)), 10, (5), -1)
 
         # Segmentation masks
         line_thickness = 4
@@ -202,14 +191,16 @@ class rootsLoader(data.Dataset):
                 for p in r.pairwise():
                     cv2.line(mask, int_t(p[0]), int_t(p[1]), (1), line_thickness)
                 # DRAW CIRCLE FOR LATERAL TIP
-                cv2.circle(mask, (int_t(r.end)), 10, (2), -1)
+                if r.end:
+                    cv2.circle(mask, (int_t(r.end)), 10, (2), -1)
 
             # Draw primary roots (ID 1)
             for r in plant.primary_roots():
                 for p in r.pairwise():
                     cv2.line(mask, int_t(p[0]), int_t(p[1]), (3), line_thickness)
                 # DRAW CIRCLE FOR PRI TIP
-                cv2.circle(mask, (int_t(r.end)), 10, (4), -1)
+                if r.end:
+                    cv2.circle(mask, (int_t(r.end)), 10, (4), -1)
 
         annotation = {
             "seeds": torch.Tensor(seeds),
@@ -227,6 +218,7 @@ class rootsLoader(data.Dataset):
         image_path, cache_path = self.files[index]
         
         image = Image.open(image_path)
+        image = image.convert('RGB')
         cache = torch.load(cache_path)
 
         if image.mode == 'RGBA':
@@ -235,50 +227,51 @@ class rootsLoader(data.Dataset):
             # Create a new image without the alpha channel
             image = Image.merge('RGB', (r, g, b))
 
+        if self.network_input_size is not None:
+            target_w, target_h = self.network_input_size[1], self.network_input_size[0]
+        else:
+            target_w, target_h = image.size
+
+        if self.network_output_size is not None:
+            out_w, out_h = self.network_output_size[1], self.network_output_size[0]
+        else:
+            out_w, out_h = target_w, target_h
+
         # Render heatmap
-        y_scale = self.network_output_size[0] / image.height
-        x_scale = self.network_output_size[1] / image.width
+        y_scale = out_h / image.height
+        x_scale = out_w / image.width
         scale = torch.Tensor([x_scale, y_scale]) # x,y order
 
-        hm = torch.zeros(3, self.network_output_size[0], self.network_output_size[1]) 
+        hm = torch.zeros(3, out_h, out_w) 
         render_heatmap_2d(hm[0], cache["seeds"].mul(scale), sigma)
         if (cache["primary"].size(0) > 0):
             render_heatmap_2d(hm[1], cache["primary"].mul(scale), sigma)
         if (cache["lateral"].size(0) > 0):
             render_heatmap_2d(hm[2], cache["lateral"].mul(scale), sigma)
 
-
-
-        # Resize image and mask to input size
-        image = image.resize((self.network_input_size[0], self.network_input_size[1]))
-
-        # IMAGES IS CORRECT SIZE (1024)
-        # HM is correct size (512)
-        # Mask is native size
+        if self.network_input_size is not None:
+            image = image.resize((target_w, target_h))
 
         mask = cache["mask"]
-        mask = interpolate(mask.unsqueeze(0).float(), (self.network_input_size[0], self.network_input_size[1]), mode='nearest')[0]
         
+        if self.network_input_size is not None:
+            mask = interpolate(mask.unsqueeze(0).float(), (target_h, target_w), mode='nearest')[0]
+        else:
+            mask = mask.float() # Ensure float for potential flipping
+
         # Augmentation - hflip
         if self.hflip > 0.0 and random.random() < self.hflip:
             image = image.transpose(Image.FLIP_LEFT_RIGHT)
             mask = mask.flip(2)
             hm = hm.flip(2)
 
-        # Final resize of mask
-        mask = interpolate(mask.unsqueeze(0), (self.network_output_size[0], self.network_output_size[1]), mode='nearest')[0]
+        if self.network_output_size is not None:
+             mask = interpolate(mask.unsqueeze(0), (out_h, out_w), mode='nearest')[0]
+        
         mask = mask.squeeze(0).long()
 
         # Convert input PIL image to tensor
         image = to_tensor(image)
-
-        # Debugging
-        #from torchvision.utils import save_image
-        #save_image(image, "source.png")
-        #save_image(hm[0], 'seed_hm.png')
-        #save_image(hm[1], 'pri_hm.png')
-        #save_image(hm[2], 'lat_hm.png')
-        #save_image(mask, 'mask.png')
 
         if self.split == 'test':
             annotations = {

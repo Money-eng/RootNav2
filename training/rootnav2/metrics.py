@@ -85,8 +85,6 @@ class runningScore(object):
     def reset(self):
         self.confusion_matrix = np.zeros((self.n_classes, self.n_classes))
 
-
-
 class averageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):

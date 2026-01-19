@@ -2,7 +2,7 @@ model:
     arch: HG
 data:
     dataset: roots # "roots" is currently the only dataset supported and represents image/rsml pairs
-    path: ./OSR_Root_dataset/ #edit your dataset path
+    path: /home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/data 
 training:
     train_iters: 25000000
     batch_size: 6   # (for two GPUs) change according to your GPU
