@@ -5,9 +5,9 @@ data:
     path: /home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/data 
 training:
     train_iters: 25000000
-    batch_size: 6   # (for two GPUs) change according to your GPU
+    batch_size: 1   # (for two GPUs) change according to your GPU
     val_interval: 100
-    n_workers: 6    # (for two GPUs) change according to your GPU
+    n_workers: 3    # (for two GPUs) change according to your GPU
     print_interval: 50
     optimizer:
         name: 'rmsprop'

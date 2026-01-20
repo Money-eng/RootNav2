@@ -18,6 +18,7 @@ from rootnav2.schedulers import get_scheduler
 from rootnav2.optimizers import get_optimizer
 from PIL import Image
 from monai.losses import DiceLoss
+from rootnav2.loss.cldice_loss import HybridMultiClassCLDiceLoss
 
 
 from torch.utils.tensorboard import SummaryWriter
@@ -150,6 +151,8 @@ def train(args):
     #    softmax=True,
     #    reduction='mean'
     #).to(device)
+    
+    #cldice_criterion = HybridMultiClassCLDiceLoss(iter_=10, alpha=0.5, smooth=1., weights=None, root_indices=None, reduction='mean').to(device)
     
     mse_criterion = torch.nn.MSELoss(reduction='mean').to(device)
 
