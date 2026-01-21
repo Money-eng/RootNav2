@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from tqdm import tqdm
 import yaml
 import time
 import shutil
@@ -10,20 +11,22 @@ import datetime
 import numpy as np
 from torch.utils import data
 from rootnav2.hourglass import hg
-from rootnav2.loss import get_loss_function
 from rootnav2.loader import get_loader 
 from rootnav2.utils import decode_segmap
 from rootnav2.metrics import runningScore, averageMeter
 from rootnav2.schedulers import get_scheduler
 from rootnav2.optimizers import get_optimizer
 from PIL import Image
-from monai.losses import DiceLoss
-from rootnav2.loss.cldice_loss import HybridMultiClassCLDiceLoss
-
 
 from torch.utils.tensorboard import SummaryWriter
 import logging
 
+# Loss functions
+from monai.losses import DiceLoss
+from rootnav2.loss.cldice_loss import HybridMultiClassCLDiceLoss
+from rootnav2.loss import get_loss_function
+
+# Metrics
 from Metrics.gpu.haussdorff import HausdorffDistance
 from Metrics.gpu.precision import Precision
 from Metrics.gpu.recall import Recall
@@ -32,8 +35,20 @@ from Metrics.gpu.iou import MeanIoU
 from Metrics.gpu.betti0_variation_index_gpu import Betti0VariationIndexGPU
 from Metrics.gpu.betti1_variation_index_gpu import Betti1VariationIndexGPU
 from Metrics.gpu.avg_centerline_distance import AverageCenterlineDistance
+from Metrics.cpu.betti1_abs_error import Betti1AbsoluteError
+from Metrics.cpu.betti0_abs_error import Betti0AbsoluteError
+from Metrics.gpu.cldice import CLDice
+from Metrics.gpu.dice import Dice
+from Metrics.gpu.focal import FocalLoss
+from Metrics.gpu.haussdorff_95 import HausdorffDistance95
+from Metrics.gpu.mutual_information import NormalizedMutualInformation
 
 weights = [0.0007,1.6246,0.7223,0.1789,1.748,12.9261] # [Background, Lateral Root, Primary Root, Seed, Primary Heatmap, Lateral Heatmap]
+
+ALL_IDX = ["Background", "Lateral Root", "Primary Root", "Seed", "Primary Heatmap", "Lateral Heatmap"]
+IDX_BACKGROUND = 0
+IDX_LATERAL = 1
+IDX_PRIMARY = 2
 
 def extract_url_from_json(json_file_path):
     with open(json_file_path, 'r') as file:
@@ -108,15 +123,19 @@ def train(args):
 
     binary_metrics = {
         "Hausdorff": HausdorffDistance(),
+        "Hausdorff95": HausdorffDistance95(),
         "Precision": Precision(),
         "Recall": Recall(),
         "F1_Score": F1Score(),
+        "Dice": Dice(),
+        "CL_Dice": CLDice(),
+        "Focal_loss": FocalLoss(),
         "IoU_Binary": MeanIoU(),
-        "Betti0_Var": Betti0VariationIndexGPU(),
-        "Betti1_Var": Betti1VariationIndexGPU(),
-        "CenterlineDist": AverageCenterlineDistance(threshold=0.5) # Peut être lent
+        "Betti0_abs": Betti0AbsoluteError(), # cpu
+        "Betti1_abs": Betti1AbsoluteError(), # cpu
+        "Normalized_Mutual_Info": NormalizedMutualInformation(),
+        "CenterlineDist": AverageCenterlineDistance(threshold=0.5)
     }
-    binary_meters = {k: averageMeter() for k in binary_metrics.keys()}
 
     model = hg()
     model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
@@ -136,7 +155,8 @@ def train(args):
          scheduler.load_state_dict(checkpoint["scheduler_state"])
          start_iter = checkpoint["epoch"]
 
-    val_loss_meter = averageMeter()
+    val_loss_seg_meter = averageMeter()
+    val_loss_mse_meter = averageMeter()
     time_meter = averageMeter()
     best_iou = -100.0
     i = start_iter
@@ -171,12 +191,14 @@ def train(args):
             optimizer.zero_grad()
             loss1 = ce_criterion(input=out_main, target=labels)
             # loss_dice = dice_criterion(input=out_main, target=labels)
+            # loss_cldice = cldice_criterion(input=out_main, target=labels)
             
             out5 = out_main[:,5:6,:,:] 
             out4 = out_main[:,4:5,:,:]
             out2 = out_main[:,2:3,:,:] 
             tips = torch.cat((out2, out4,  out5), 1)
             loss2 = mse_criterion(input=tips, target=hm)
+            
 
             loss1.backward(retain_graph=True)
             loss2.backward()
@@ -188,18 +210,33 @@ def train(args):
             if (i + 1) % cfg['training']['print_interval'] == 0:
                 logger.info("Iter [{:d}/{:d}] Loss: {:.4f} Time/Image: {:.4f}".format(
                     i + 1, cfg['training']['train_iters'], loss1.item(), time_meter.avg / cfg['training']['batch_size']))
-                writer.add_scalar('loss/train_loss', loss1.item(), i+1)
+                writer.add_scalar('loss/train_loss_ce', loss1.item(), i+1)
+                writer.add_scalar('loss/train_loss_mse', loss2.item(), i+1)
                 time_meter.reset()
 
             if (i + 1) % cfg['training']['val_interval'] == 0 or (i + 1) == cfg['training']['train_iters']:
                 model.eval()
                 logger.info("Validation:")
                 
-                for meter in binary_meters.values():
-                    meter.reset()
+                
+                target_categories = {
+                    'Lateral': IDX_LATERAL,       # 1
+                    'Primary': IDX_PRIMARY        # 2
+                }
 
+                cat_meters = {
+                    name: {k: averageMeter() for k in binary_metrics.keys()} 
+                    for name in target_categories.keys()
+                }
+                cat_meters['Binary'] = {k: averageMeter() for k in binary_metrics.keys()}
+                
+                val_loss_seg_meter.reset()
+                val_loss_mse_meter.reset()
+                running_metrics_val.reset()
+                
                 with torch.no_grad():
-                    for images_val, labels_val, hm in valloader:
+                    val_loader_iter = tqdm(valloader, desc="Validation", unit="batch")
+                    for images_val, labels_val, hm in val_loader_iter:
                         images_val = images_val.to(device)
                         labels_val = labels_val.to(device)
                         hm = hm.to(device)
@@ -208,36 +245,71 @@ def train(args):
                         outputs1 = outputs[-1]
                         
                         val_loss1 = ce_criterion(input=outputs1, target=labels_val)
-                        val_loss_meter.update(val_loss1.item())
+                        val_loss_seg_meter.update(val_loss1.item())
+                        val_loss2 = mse_criterion(input=torch.cat((outputs1[:,2:3,:,:], outputs1[:,4:5,:,:], outputs1[:,5:6,:,:]),1), target=hm)
+                        val_loss_mse_meter.update(val_loss2.item())
 
+                        val_loader_iter.set_postfix({'val_loss_seg': val_loss_seg_meter.avg, 'val_loss_mse': val_loss_mse_meter.avg})
                         pred_cls = outputs1.data.max(1)[1] # [Batch, H, W] (Indices 0-5)
                         pred_cls_np = pred_cls.cpu().numpy()
                         gt_np = labels_val.data.cpu().numpy()
                         running_metrics_val.update(gt_np, pred_cls_np)
+                        
+                        
+                        batch_masks = {}
+                       
+                        # Background (0), Lateral (1), Primary (2)
+                        for name, idx in target_categories.items():
+                            pred_mask = (pred_cls == idx).float().unsqueeze(1)
+                            gt_mask   = (labels_val == idx).float().unsqueeze(1)
+                            batch_masks[name] = (pred_mask, gt_mask)
 
-                        bin_pred = (pred_cls > 0).float().unsqueeze(1) # [B, 1, H, W]
-                        bin_mask = (labels_val > 0).float().unsqueeze(1) # [B, 1, H, W]
+                        pred_comb = ((pred_cls == IDX_LATERAL) | (pred_cls == IDX_PRIMARY)).float().unsqueeze(1)
+                        gt_comb   = ((labels_val == IDX_LATERAL) | (labels_val == IDX_PRIMARY)).float().unsqueeze(1)
+                        batch_masks['Binary'] = (pred_comb, gt_comb)
+                        
+                        for cat_name, (p_mask, g_mask) in batch_masks.items():
+                            for metric_name, metric_fn in binary_metrics.items():
+                                try:
+                                    val_loader_iter.set_postfix({f"{cat_name}_{metric_name}": f"computing"})
+                                    val = metric_fn(p_mask, g_mask)
+                                    if isinstance(val, torch.Tensor):
+                                        val = val.item()
+                                        
+                                    if not np.isnan(val):
+                                        cat_meters[cat_name][metric_name].update(val)
+                                except Exception as e:
+                                    pass
 
-                        for key, metric_fn in binary_metrics.items():
-                            try:
-                                val = metric_fn(bin_pred, bin_mask)
-                                if not np.isnan(val):
-                                    binary_meters[key].update(val)
-                            except Exception as e:
-                                logger.warning(f"Error calculating {key}: {e}")
-
-                writer.add_scalar('loss/val_loss', val_loss_meter.avg, i+1)
+                val_loader_iter.close()
+                writer.add_scalar('loss/val_loss_seg', val_loss_seg_meter.avg, i+1)
+                writer.add_scalar('loss/val_loss_mse', val_loss_mse_meter.avg, i+1)
                 score, class_iou = running_metrics_val.get_scores()
+                
+                cat_meters['Multi-Class'] = {}
+                for key, value in score.items():
+                    logger.info(f"{key}: {value:.4f}")
+                    writer.add_scalar(f'val_multi_class/{key}', value, i+1)
+                    cat_meters['Multi-Class'][key] = averageMeter()
+                    cat_meters['Multi-Class'][key].update(value)
+                    
+                for key, value in class_iou.items():
+                    logger.info(f"Class {key} IoU: {value:.4f}")
+                    writer.add_scalar(f'val_class_iou/class_{key}_iou', value, i+1)
+                    cat_meters['Multi-Class'][f'class_{key}_iou'] = averageMeter()
+                    cat_meters['Multi-Class'][f'class_{key}_iou'].update(value)
+                
+                display_order = ['Primary', 'Lateral', 'Binary', "Multi-Class"]
+                for cat in display_order:
+                    logger.info(f"--- {cat} Segmentation Metrics ---")
+                    for key, meter in cat_meters[cat].items():
+                        logger.info(f"{key}: {meter.avg:.4f}")
+                        writer.add_scalar(f'val_{cat}/{key}', meter.avg, i+1)
 
-                logger.info("--- Binary Segmentation Metrics ---")
-                for key, meter in binary_meters.items():
-                    writer.add_scalar(f'val_metrics_binary/{key}', meter.avg, i+1)
-                    logger.info(f"{key}: {meter.avg:.4f}")
                 logger.info("-----------------------------------")
-
-                logger.info(f"Overall Acc: {score['oacc']:.6f} | Mean IoU: {score['miou']:.6f}")
-
-                val_loss_meter.reset()
+                
+                val_loss_seg_meter.reset()
+                val_loss_mse_meter.reset()
                 running_metrics_val.reset()
 
                 state = {
@@ -261,12 +333,29 @@ def train(args):
                     logger.info(f"New Best Model saved (IoU: {best_iou:.4f})")
 
                 if (args.output_example):
-                    pred1 = np.squeeze(pred_cls_np[0], axis=0) # [H, W]
+                    pred1 = pred_cls[0].cpu().numpy()
                     channel_bindings = {'segmentation': {'Background': 0, 'Primary': 3, 'Lateral': 1}, 'heatmap': {'Seed': 5, 'Primary': 4, 'Lateral': 2}}
                     decoded = decode_segmap(np.array(pred1, dtype=np.uint8), channel_bindings)
                     decoded = Image.fromarray(decoded, 'RGBA')
                     example_path = os.path.join(logdir, 'validation_example.png')
                     decoded.save(example_path)
+                    
+                    from torchvision.utils import save_image
+                    temp_dir = os.path.join(logdir, 'temp_viz')
+                    os.makedirs(temp_dir, exist_ok=True)
+
+                    img_tensor = images_val[0].cpu().float()
+                    save_path_input = os.path.join(temp_dir, f'epoch_{i+1}_input.png')
+                    save_image(img_tensor, save_path_input)
+                    gt_numpy = labels_val[0].cpu().numpy().astype(np.uint8)
+                    try:
+                        decoded_gt = decode_segmap(gt_numpy, channel_bindings)
+                        im_gt = Image.fromarray(decoded_gt, 'RGBA')
+                        im_gt.save(os.path.join(temp_dir, f'epoch_{i+1}_ground_truth.png'))
+                    except Exception as e:
+                        logger.warning(f"Erreur lors du décodage du GT: {e}")
+
+                    logger.info(f"Visualisation sauvegardée dans : {temp_dir}")
 
             if (i + 1) == cfg['training']['train_iters']:
                 flag = False

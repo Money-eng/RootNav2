@@ -60,7 +60,7 @@ class runningScore(object):
             - overall accuracy
             - mean accuracy
             - mean IU
-            - fwavacc
+            - fwavacc # mean frequency weighted average accuracy
         """
         hist = self.confusion_matrix
         acc = np.diag(hist).sum() / hist.sum()

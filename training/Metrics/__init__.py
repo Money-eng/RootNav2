@@ -12,7 +12,6 @@ from .cpu.euler_charac_variation_index import EulerCharacVariationIndex
 from .cpu.persistence_bottleneck import PeristenceBottleneck
 from .cpu.persistence_wasserstein import PeristenceWasserstein
 from .cpu.variation_of_information import VI
-from .gpu.apls import APLS
 from .gpu.avg_centerline_distance import AverageCenterlineDistance
 from .gpu.betti0_ratio_gpu import Betti0JaccardRatioGPU
 from .gpu.betti0_relative_error_gpu import Betti0RelativeErrorGPU
@@ -20,8 +19,6 @@ from .gpu.betti0_variation_index_gpu import Betti0VariationIndexGPU
 from .gpu.betti1_ratio_gpu import Betti1JaccardRatioGPU
 from .gpu.betti1_relative_error_gpu import Betti1RelativeErrorGPU
 from .gpu.betti1_variation_index_gpu import Betti1VariationIndexGPU
-from .gpu.branch_break_rate import BranchBrakeRate
-from .gpu.branch_length_rate import BranchLengthRate
 from .gpu.centerline_f1 import CenterlineF1
 from .gpu.cldice import CLDice
 from .gpu.dice import Dice
@@ -30,14 +27,8 @@ from .gpu.focal import FocalLoss
 from .gpu.haussdorff import HausdorffDistance
 from .gpu.iou import MeanIoU
 from .gpu.mutual_information import NormalizedMutualInformation
-from .gpu.persistence_bottleneck_gpu import PersistenceBottleneckGPUParallel
-from .gpu.persistence_wasserstein_gpu import PersistenceWassersteinGPUParallel
-from .gpu.pixel_accuracy import PixelAccuracy
 from .gpu.precision import Precision
 from .gpu.recall import Recall
-from .gpu.specificity import Specificity
-from .gpu.surface_dice import Surface_dice
-from .gpu.surface_difference import Surface_distance
 
 # Global dictionnary to map metric names to their corresponding classes
 METRIC_FACTORIES = {
@@ -47,12 +38,8 @@ METRIC_FACTORIES = {
     "focal_loss": FocalLoss,
     "f1_score": F1Score,
     "mean_iou": MeanIoU,
-    "pixel_accuracy": PixelAccuracy,
     "precision": Precision,
     "recall": Recall,
-    "specificity": Specificity,
-    "surface_distance": Surface_distance,
-    "surface_dice": Surface_dice,
     "hausdorff_distance": HausdorffDistance,
     "normalized_mutual_information": NormalizedMutualInformation,
     "betti0_jaccard_ratio_gpu": Betti0JaccardRatioGPU,
@@ -63,11 +50,6 @@ METRIC_FACTORIES = {
     "betti1_variation_index_gpu": Betti1VariationIndexGPU,
     "centerline_f1_gpu": CenterlineF1,
     "average_centerline_distance": AverageCenterlineDistance,
-    "average_path_length_similarity": APLS,
-    "persistence_bottleneck_gpu": PersistenceBottleneckGPUParallel,
-    "persistence_wasserstein_gpu": PersistenceWassersteinGPUParallel,
-    "branch_break_rate": BranchBrakeRate,
-    "branch_length_rate": BranchLengthRate,
 
     # CPU
     "variation_of_information": VI,
