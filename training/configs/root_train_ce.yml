@@ -2,17 +2,17 @@ model:
     arch: HG
 data:
     dataset: roots # "roots" is currently the only dataset supported and represents image/rsml pairs
-    path: /home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/data 
+    path: ./training/data 
 training:
     train_iters: 25000000
-    batch_size: 1   # (for two GPUs) change according to your GPU
+    batch_size: 32   # (for two GPUs) change according to your GPU
     val_interval: 100
-    n_workers: 3    # (for two GPUs) change according to your GPU
+    n_workers: 6    # (for two GPUs) change according to your GPU
     print_interval: 50
     optimizer:
         name: 'rmsprop'
-        lr: 0.0001
-        weight_decay: 0.001
+        lr: 1e-4
+        weight_decay: 1e-3
         momentum: 0.9
     loss:
         name: 'cross_entropy'

@@ -12,6 +12,8 @@ class CLDice(BaseMetric):
 
     def __init__(self):
         super().__init__()
+        self.cldice_loss = SoftclDiceLoss()
+        self.loss_metric = LossMetric(loss_fn=self.cldice_loss)
 
     def is_better(self, old_score: float, new_score: float) -> bool:
         return new_score > old_score
@@ -20,9 +22,8 @@ class CLDice(BaseMetric):
         pred = prediction.float()
         msk = mask.float()
 
-        cldice_loss = SoftclDiceLoss()
-        loss_metric = LossMetric(loss_fn=cldice_loss)
+        pred_2ch = torch.cat([1 - pred, pred], dim=1)
+        msk_2ch = torch.cat([1 - msk, msk], dim=1)
 
-        loss_metric(pred, msk)
-        score = loss_metric.aggregate(reduction="mean")
-        return score.item()
+        loss_val = self.cldice_loss(pred_2ch, msk_2ch)
+        return 1.0 - loss_val.mean().item()

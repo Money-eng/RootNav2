@@ -231,3 +231,68 @@ class ModelLoader():
             print ("Done")
 
         return model_json
+
+    @staticmethod
+    def get_model_from_weights(path, gpu=True):
+        model_json = {
+            "name": "Budule_the_model",
+            "description": "Custom Arabidopsis model",
+            "uuid": "custom-uuid-1234-5678",  # arbitrary UUID
+            "history": {
+                "model": {
+                    "parent-model": "",
+                    "trained-by": {"Gandeel": "Loai", "affiliation": "INRIA", "email": "loai.gandeel@inria.fr"},
+                    "license": "Private"
+                },
+                "dataset": {
+                    "owner": [{"Fernandez": "Romain", "affiliation": "CIRAD", "email": "romain.fernandez@cirad.fr"}],
+                }
+            },
+            "configuration": {
+                "multi-plant": True,
+                "network": {
+                    "architecture": "hg",
+                    "weights": path,
+                    "scale": 1,
+                    "input-size": 1024,
+                    "output-size": 512,
+                    
+                    "channel-bindings": {
+                        "segmentation": { "Background": 0, "Primary": 1, "Lateral": 3 },
+                        "heatmap": { "Seed": 5, "Primary": 2, "Lateral": 4 }
+                    }
+                },
+                "pathing": { # From RootNav 2
+                    "rtree-threshold": 36,
+                    "nms-threshold": 0.9,
+                    "max-primary-distance": 200,
+                    "max-lateral-distance": 200,
+                    "spline-config": {
+                        "primary": { "tension": 0.5, "spacing": 50 },
+                        "lateral": { "tension": 0.5, "spacing": 20 }
+                    }
+                }
+            }
+        }
+        model = None
+
+        selected_arch = 'hg'  # Only one tested for now
+
+        # Load model
+        weights_file = path
+
+        model = None
+        if selected_arch == 'hg':
+            sys.stdout.write('Loading model...')
+            sys.stdout.flush()
+            model = hg()
+            if gpu:
+                state = convert_state_dict(torch.load(weights_file, weights_only=False)['model_state'])
+            else:
+                state = convert_state_dict(torch.load(weights_file, map_location='cpu')['model_state'])
+            model.load_state_dict(state)
+            model.eval()
+            model_json['model'] = model
+            print ("Done")
+
+        return model_json

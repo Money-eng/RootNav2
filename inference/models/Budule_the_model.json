@@ -1,0 +1,63 @@
+{
+    "name": "Budule_the_model",
+    "description": "Custom Arabidopsis model generated via Python script",
+    "uuid": "custom-uuid-1234-5678",
+    "history": {
+        "model": {
+            "parent-model": "",
+            "trained-by": {
+                "Gandeel": "Loai",
+                "affiliation": "INRIA",
+                "email": "loai.gandeel@inria.fr"
+            },
+            "license": "Private"
+        },
+        "dataset": {
+            "owner": [
+                {
+                    "Fernandez": "Romain",
+                    "affiliation": "CIRAD",
+                    "email": "romain.fernandez@cirad.fr"
+                }
+            ]
+        }
+    },
+    "configuration": {
+        "multi-plant": true,
+        "network": {
+            "architecture": "hg",
+            "weights": "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/runs/root_train/22219/HG_roots_epoch_1500.pkl",
+            "scale": 1,
+            "input-size": 1024,
+            "output-size": 512,
+            "channel-bindings": {
+                "segmentation": {
+                    "Background": 0,
+                    "Primary": 1,
+                    "Lateral": 3
+                },
+                "heatmap": {
+                    "Seed": 5,
+                    "Primary": 2,
+                    "Lateral": 4
+                }
+            }
+        },
+        "pathing": {
+            "rtree-threshold": 36,
+            "nms-threshold": 0.9,
+            "max-primary-distance": 200,
+            "max-lateral-distance": 200,
+            "spline-config": {
+                "primary": {
+                    "tension": 0.5,
+                    "spacing": 50
+                },
+                "lateral": {
+                    "tension": 0.5,
+                    "spacing": 20
+                }
+            }
+        }
+    }
+}

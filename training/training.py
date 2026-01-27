@@ -1,6 +1,9 @@
 import logging
 from run_training import train
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 class LogFormatter(logging.Formatter):
     def format(self, record):
         self.datefmt='%H:%M:%S'
@@ -24,7 +27,7 @@ logger.addHandler(handler)
 
 class Args:
     def __init__(self):
-        self.config = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/configs/root_train.yml" 
+        self.config = "./training/configs/root_train_cldice.yml" 
         
         self.output_example = True
         

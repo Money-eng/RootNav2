@@ -33,12 +33,22 @@ if __name__ == '__main__':
     parser.add_argument('--model', default="wheat_bluepaper", metavar='M', help="The trained model to use (default wheat_bluepaper)")
     parser.add_argument('--no_cuda', action='store_true', default=False, help='disables CUDA')
     parser.add_argument('--segmentation_images', action='store_true', default=False, help='Reduce output files to minimum')
-    parser.add_argument('--debug', action='store_true', default=False, help='Show additional debug messages')
+    parser.add_argument('--debug', action='store_true', default=True, help='Show additional debug messages')
     parser.add_argument('input_dir', type=str, help='Input directory', nargs="?")
     parser.add_argument('output_dir', type=str, help='Output directory', nargs="?")
 
-    args = parser.parse_args()
-
+    #args = parser.parse_args()
+    input_dir = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/data/test/"
+    output_dir = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/test_output/"
+    debug = True
+    no_cuda = False
+    segmentation_images = True
+    
+    
+    
+    # ######################################"
+    MY_WEIGHTS_PATH = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/runs/root_train/22219/HG_roots_epoch_1500.pkl"
+    args = parser.parse_args([input_dir, output_dir, '--debug', '--model', MY_WEIGHTS_PATH, '--segmentation_images'])
     # Title
     logger.info("RootNav 2.1")
 
@@ -57,6 +67,7 @@ if __name__ == '__main__':
         logger.info("No output folder specified, will try and write output to " + args.input_dir + "_output")
         output_dir = args.input_dir + '_output'
     else:
+        print(args.output_dir)
         output_dir = args.output_dir
 
     if os.path.exists(output_dir):
@@ -75,7 +86,7 @@ if __name__ == '__main__':
 
     # Load the model
     try:
-        model_data = ModelLoader.get_model(args.model, gpu=use_cuda)
+        model_data = ModelLoader.get_model_from_weights(args.model, gpu=use_cuda)
     except Exception as ex:
         logger.error(ex)
         exit()

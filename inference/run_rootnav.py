@@ -67,8 +67,8 @@ def run_rootnav(model_data, use_cuda, args, input_dir, output_dir):
             factor1 = realh / 512.0
             factor2 = realw / 512.0
 
-            resized_img = np.array(pil_img.resize((net_output_size, net_output_size),resample=BICUBIC))
-            img = np.array(pil_img.resize((net_input_size, net_input_size)))
+            resized_img = np.array(pil_img.resize((net_output_size, net_output_size),resample=BICUBIC)) # Resize to network output size for CRF processing
+            img = np.array(pil_img.resize((net_input_size, net_input_size))) # Resize to network input size for network processing
 
             logger.debug(f"Resizing image to {net_input_size}x{net_input_size}")  
 

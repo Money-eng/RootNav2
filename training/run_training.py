@@ -32,11 +32,9 @@ from Metrics.gpu.precision import Precision
 from Metrics.gpu.recall import Recall
 from Metrics.gpu.f1_score import F1Score
 from Metrics.gpu.iou import MeanIoU
-from Metrics.gpu.betti0_variation_index_gpu import Betti0VariationIndexGPU
-from Metrics.gpu.betti1_variation_index_gpu import Betti1VariationIndexGPU
 from Metrics.gpu.avg_centerline_distance import AverageCenterlineDistance
-from Metrics.cpu.betti1_abs_error import Betti1AbsoluteError
-from Metrics.cpu.betti0_abs_error import Betti0AbsoluteError
+from Metrics.gpu.betti1_abs_err import Betti1AbsErrGPU
+from Metrics.gpu.betti0_abs_err import Betti0AbsErrGPU
 from Metrics.gpu.cldice import CLDice
 from Metrics.gpu.dice import Dice
 from Metrics.gpu.focal import FocalLoss
@@ -112,8 +110,8 @@ def train(args):
 
     data_loader = get_loader(cfg['data']['dataset'])
     data_path = cfg['data']['path']
-    t_loader = data_loader(data_path, split='train', hflip=hflip)
-    v_loader = data_loader(data_path, split='valid')
+    t_loader = data_loader(data_path, split='train', hflip=hflip) #, network_input_size=None, network_output_size=None)
+    v_loader = data_loader(data_path, split='valid') #, network_input_size=None, network_output_size=None)
 
     n_classes = t_loader.n_classes
     trainloader = data.DataLoader(t_loader, batch_size=cfg['training']['batch_size'], num_workers=cfg['training']['n_workers'], shuffle=True)
@@ -122,19 +120,19 @@ def train(args):
     running_metrics_val = runningScore(n_classes)
 
     binary_metrics = {
-        "Hausdorff": HausdorffDistance(),
-        "Hausdorff95": HausdorffDistance95(),
+        # "Hausdorff": HausdorffDistance(),
+        # "Hausdorff95": HausdorffDistance95(),
         "Precision": Precision(),
         "Recall": Recall(),
-        "F1_Score": F1Score(),
+        # "F1_Score": F1Score(),
         "Dice": Dice(),
-        "CL_Dice": CLDice(),
+        # "CL_Dice": CLDice(),
         "Focal_loss": FocalLoss(),
-        "IoU_Binary": MeanIoU(),
-        "Betti0_abs": Betti0AbsoluteError(), # cpu
-        "Betti1_abs": Betti1AbsoluteError(), # cpu
-        "Normalized_Mutual_Info": NormalizedMutualInformation(),
-        "CenterlineDist": AverageCenterlineDistance(threshold=0.5)
+        # "IoU_Binary": MeanIoU(),
+        # "Betti0_abs": Betti0AbsErrGPU(),
+        # "Betti1_abs": Betti1AbsErrGPU(),
+        # "Normalized_Mutual_Info": NormalizedMutualInformation(),
+        # "CenterlineDist": AverageCenterlineDistance(threshold=0.5)
     }
 
     model = hg()
@@ -155,7 +153,9 @@ def train(args):
          scheduler.load_state_dict(checkpoint["scheduler_state"])
          start_iter = checkpoint["epoch"]
 
-    val_loss_seg_meter = averageMeter()
+    val_loss_seg_meter_ce = averageMeter()
+    val_loss_seg_meter_dice = averageMeter()
+    val_loss_seg_meter_cldice = averageMeter()
     val_loss_mse_meter = averageMeter()
     time_meter = averageMeter()
     best_iou = -100.0
@@ -165,14 +165,15 @@ def train(args):
     ##### LOSS FUNCTIONS #####
     ce_criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 
-    #dice_criterion = DiceLoss(
-    #    weight=class_weights,
-    #    to_onehot_y=True,
-    #    softmax=True,
-    #    reduction='mean'
-    #).to(device)
+    dice_criterion = DiceLoss(
+    weight=class_weights,
+        to_onehot_y=True,
+        softmax=True,
+        reduction='mean'
+    ).to(device)
     
-    #cldice_criterion = HybridMultiClassCLDiceLoss(iter_=10, alpha=0.5, smooth=1., weights=None, root_indices=None, reduction='mean').to(device)
+    # root diamter is 5 pixels -> iter = 3
+    cldice_criterion = HybridMultiClassCLDiceLoss(iter_=3, alpha=0.5, smooth=1., weights=class_weights.tolist(), root_indices=[IDX_LATERAL, IDX_PRIMARY], reduction='mean').to(device)
     
     mse_criterion = torch.nn.MSELoss(reduction='mean').to(device)
 
@@ -189,9 +190,14 @@ def train(args):
             out_main = outputs[-1]
             
             optimizer.zero_grad()
-            loss1 = ce_criterion(input=out_main, target=labels)
-            # loss_dice = dice_criterion(input=out_main, target=labels)
-            # loss_cldice = cldice_criterion(input=out_main, target=labels)
+            # loss1 = dice_criterion(input=out_main, target=labels.unsqueeze(1))
+            
+            # loss1 = ce_criterion(input=out_main, target=labels)
+            
+            probs = torch.softmax(out_main, dim=1)
+            target_one_hot = torch.nn.functional.one_hot(labels, num_classes=6)
+            target_one_hot = target_one_hot.permute(0, 3, 1, 2).float().to(device)
+            loss1 = cldice_criterion(y_true=target_one_hot, y_pred=probs)
             
             out5 = out_main[:,5:6,:,:] 
             out4 = out_main[:,4:5,:,:]
@@ -230,7 +236,9 @@ def train(args):
                 }
                 cat_meters['Binary'] = {k: averageMeter() for k in binary_metrics.keys()}
                 
-                val_loss_seg_meter.reset()
+                val_loss_seg_meter_ce.reset()
+                val_loss_seg_meter_dice.reset()
+                val_loss_seg_meter_cldice.reset()
                 val_loss_mse_meter.reset()
                 running_metrics_val.reset()
                 
@@ -244,12 +252,20 @@ def train(args):
                         outputs = model(images_val)
                         outputs1 = outputs[-1]
                         
-                        val_loss1 = ce_criterion(input=outputs1, target=labels_val)
-                        val_loss_seg_meter.update(val_loss1.item())
+                        val_loss_ce = ce_criterion(input=outputs1, target=labels_val)
+                        val_loss_seg_meter_ce.update(val_loss_ce.item())
+                        val_loss_dice = dice_criterion(input=outputs1, target=labels_val.unsqueeze(1))
+                        val_loss_seg_meter_dice.update(val_loss_dice.item())
+                        
+                        probs_val = torch.softmax(outputs1, dim=1)
+                        target_one_hot_val = torch.nn.functional.one_hot(labels_val, num_classes=6)
+                        target_one_hot_val = target_one_hot_val.permute(0, 3, 1, 2).float()
+                        val_loss_cldice = cldice_criterion(y_true=target_one_hot_val, y_pred=probs_val)
+                        val_loss_seg_meter_cldice.update(val_loss_cldice.item())
                         val_loss2 = mse_criterion(input=torch.cat((outputs1[:,2:3,:,:], outputs1[:,4:5,:,:], outputs1[:,5:6,:,:]),1), target=hm)
                         val_loss_mse_meter.update(val_loss2.item())
 
-                        val_loader_iter.set_postfix({'val_loss_seg': val_loss_seg_meter.avg, 'val_loss_mse': val_loss_mse_meter.avg})
+                        val_loader_iter.set_postfix({'val_loss_seg_ce': val_loss_seg_meter_ce.avg, 'val_loss_seg_dice': val_loss_seg_meter_dice.avg, 'val_loss_seg_cldice': val_loss_seg_meter_cldice.avg, 'val_loss_mse': val_loss_mse_meter.avg})
                         pred_cls = outputs1.data.max(1)[1] # [Batch, H, W] (Indices 0-5)
                         pred_cls_np = pred_cls.cpu().numpy()
                         gt_np = labels_val.data.cpu().numpy()
@@ -279,10 +295,13 @@ def train(args):
                                     if not np.isnan(val):
                                         cat_meters[cat_name][metric_name].update(val)
                                 except Exception as e:
+                                    print(f"CRASH Metric {metric_name} sur {cat_name}: {e}")
                                     pass
 
                 val_loader_iter.close()
-                writer.add_scalar('loss/val_loss_seg', val_loss_seg_meter.avg, i+1)
+                writer.add_scalar('loss/val_loss_seg_ce', val_loss_seg_meter_ce.avg, i+1)
+                writer.add_scalar('loss/val_loss_seg_dice', val_loss_seg_meter_dice.avg, i+1)
+                writer.add_scalar('loss/val_loss_seg_cldice', val_loss_seg_meter_cldice.avg, i+1)
                 writer.add_scalar('loss/val_loss_mse', val_loss_mse_meter.avg, i+1)
                 score, class_iou = running_metrics_val.get_scores()
                 
@@ -308,7 +327,9 @@ def train(args):
 
                 logger.info("-----------------------------------")
                 
-                val_loss_seg_meter.reset()
+                val_loss_seg_meter_ce.reset()
+                val_loss_seg_meter_dice.reset()
+                val_loss_seg_meter_cldice.reset()
                 val_loss_mse_meter.reset()
                 running_metrics_val.reset()
 
@@ -340,22 +361,22 @@ def train(args):
                     example_path = os.path.join(logdir, 'validation_example.png')
                     decoded.save(example_path)
                     
-                    from torchvision.utils import save_image
-                    temp_dir = os.path.join(logdir, 'temp_viz')
-                    os.makedirs(temp_dir, exist_ok=True)
+                    # from torchvision.utils import save_image
+                    # temp_dir = os.path.join(logdir, 'temp_viz')
+                    # os.makedirs(temp_dir, exist_ok=True)
 
-                    img_tensor = images_val[0].cpu().float()
-                    save_path_input = os.path.join(temp_dir, f'epoch_{i+1}_input.png')
-                    save_image(img_tensor, save_path_input)
-                    gt_numpy = labels_val[0].cpu().numpy().astype(np.uint8)
-                    try:
-                        decoded_gt = decode_segmap(gt_numpy, channel_bindings)
-                        im_gt = Image.fromarray(decoded_gt, 'RGBA')
-                        im_gt.save(os.path.join(temp_dir, f'epoch_{i+1}_ground_truth.png'))
-                    except Exception as e:
-                        logger.warning(f"Erreur lors du décodage du GT: {e}")
+                    # img_tensor = images_val[0].cpu().float()
+                    # save_path_input = os.path.join(temp_dir, f'epoch_{i+1}_input.png')
+                    # save_image(img_tensor, save_path_input)
+                    # gt_numpy = labels_val[0].cpu().numpy().astype(np.uint8)
+                    # try:
+                    #     decoded_gt = decode_segmap(gt_numpy, channel_bindings)
+                    #     im_gt = Image.fromarray(decoded_gt, 'RGBA')
+                    #     im_gt.save(os.path.join(temp_dir, f'epoch_{i+1}_ground_truth.png'))
+                    # except Exception as e:
+                    #     logger.warning(f"Erreur lors du décodage du GT: {e}")
 
-                    logger.info(f"Visualisation sauvegardée dans : {temp_dir}")
+                    # logger.info(f"Visualisation sauvegardée dans : {temp_dir}")
 
             if (i + 1) == cfg['training']['train_iters']:
                 flag = False

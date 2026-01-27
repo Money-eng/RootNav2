@@ -13,7 +13,7 @@ def _ensure_2d_bin(t: torch.Tensor, thr: float):
     if t.ndim == 4 and t.shape[1] == 1:
         t = t[:, 0]
     elif t.ndim == 4 and t.shape[1] > 1:
-        raise ValueError("Mask/pred doivent être mono-classe (C=1).")
+        raise ValueError("Mask/pred must be binary for centerline distance.")
     return (t >= thr).to(torch.uint8)
 
 
@@ -22,7 +22,6 @@ def _skeletonize_gpu(bin_cp):
         from cucim.skimage.morphology import thin
         return thin(bin_cp)
     except Exception:
-        # Fallback CPU (handle both 2D and 3D inputs)
         import numpy as np, cupy as cp
         from skimage.morphology import skeletonize
         if bin_cp.ndim == 2:
@@ -36,9 +35,8 @@ def _skeletonize_gpu(bin_cp):
 
 
 def _edt_to_ones(bin_cp, sampling=None):
-    # distance aux "1" via EDT sur l'inverse
     from cupyx.scipy.ndimage import distance_transform_edt
-    return distance_transform_edt(1 - bin_cp.astype(bool), sampling=sampling)
+    return distance_transform_edt(1 - bin_cp.astype(bool), sampling=sampling) # edt of the inverse binary
 
 
 class AverageCenterlineDistance(BaseMetric):
@@ -58,24 +56,21 @@ class AverageCenterlineDistance(BaseMetric):
         import numpy as np
         pred = _ensure_2d_bin(prediction, self.threshold)
         gt = _ensure_2d_bin(mask, self.threshold)
-        if not pred.is_cuda or not gt.is_cuda:
-            raise ValueError("CenterlineDistance attend des tenseurs CUDA.")
         cp_pred = _to_cu(pred)
         cp_gt = _to_cu(gt)
     
         acd = []
-        for i in range(cp_pred.shape[0]):
-            sk_pred = _skeletonize_gpu(cp_pred[i]).astype(cp.uint8)
-            sk_gt = _skeletonize_gpu(cp_gt[i]).astype(cp.uint8)
+        for i in range(cp_pred.shape[0]): # for each image in the batch
+            sk_pred = _skeletonize_gpu(cp_pred[i]).astype(cp.uint8) # skeletonized prediction (1 is skeleton, 0 is background)
+            sk_gt = _skeletonize_gpu(cp_gt[i]).astype(cp.uint8) # skeletonized ground truth
 
-            dt_gt = _edt_to_ones(sk_gt, sampling=self.sampling)
+            dt_gt = _edt_to_ones(sk_gt, sampling=self.sampling) # distance transform of the inverse skeletonized ground truth ()
             dt_pr = _edt_to_ones(sk_pred, sampling=self.sampling)
 
-            d1 = dt_gt[sk_pred.astype(bool)]  # image with skeletonized prediction (binary)
-            d2 = dt_pr[sk_gt.astype(bool)]
+            d1 = dt_gt[sk_pred.astype(bool)]  # get distances at predicted skeleton points in ground truth edt
+            d2 = dt_pr[sk_gt.astype(bool)] # get distances at ground truth skeleton points in predicted edt
             if d1.size == 0 and d2.size == 0:
-                continue  # skip empty case
-            all_d = cp.concatenate([d1, d2]) if (d1.size and d2.size) else (d1 if d1.size else d2)
-            acd.append(float(all_d.mean().get()))
-        #print(f"ACD batch: {acd}")
+                continue 
+            all_d = cp.concatenate([d1, d2]) # all distances
+            acd.append(float(all_d.mean().get())) # add mean distance for this image to the list
         return float(np.mean(acd)) if acd else float("nan")

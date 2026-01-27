@@ -176,7 +176,7 @@ class rootsLoader(data.Dataset):
 
 
         # Segmentation masks
-        line_thickness = 4
+        line_thickness = 5 # 4
 
         # 0 BG
         # 1 Lat seg

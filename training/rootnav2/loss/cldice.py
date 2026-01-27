@@ -9,7 +9,7 @@ class soft_cldice(nn.Module):
         super(soft_cldice, self).__init__()
         self.iter = iter_
         self.smooth = smooth
-        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
+        self.soft_skeletonize = SoftSkeletonize(num_iter=iter_)
         self.exclude_background = exclude_background
 
     def forward(self, y_true, y_pred):
@@ -25,15 +25,6 @@ class soft_cldice(nn.Module):
 
 
 def soft_dice(y_true, y_pred):
-    """[function to compute dice loss]
-
-    Args:
-        y_true ([float32]): [ground truth image]
-        y_pred ([float32]): [predicted image]
-
-    Returns:
-        [float32]: [loss value]
-    """
     smooth = 1
     intersection = torch.sum((y_true * y_pred))
     coeff = (2. * intersection + smooth) / (torch.sum(y_true) + torch.sum(y_pred) + smooth)
@@ -46,7 +37,7 @@ class soft_dice_cldice(nn.Module):
         self.iter = iter_
         self.smooth = smooth
         self.alpha = alpha
-        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
+        self.soft_skeletonize = SoftSkeletonize(num_iter=iter_)
         self.exclude_background = exclude_background
 
     def forward(self, y_true, y_pred):

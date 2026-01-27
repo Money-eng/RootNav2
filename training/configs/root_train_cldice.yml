@@ -1,0 +1,29 @@
+model:
+    arch: HG
+data:
+    dataset: roots # "roots" is currently the only dataset supported and represents image/rsml pairs
+    path: ./training/data 
+training:
+    train_iters: 25000000
+    batch_size: 32   # (for two GPUs) change according to your GPU
+    val_interval: 100
+    n_workers: 6    # (for two GPUs) change according to your GPU
+    print_interval: 50
+    optimizer:
+        name: 'rmsprop'
+        lr: 1e-5
+        weight_decay: 1e-4
+        momentum: 0.9
+    loss:
+        name: 'cross_entropy'
+        size_average: False
+    # Augmentations Configuration
+    augmentations:
+        hflip: 0.5
+
+    lr_schedule:
+    resume: #../inference/models/wheat_bluepaper.pth
+            # (can use the trained model from inference section)
+testing:
+    batch_size: 6
+    n_workers: 6

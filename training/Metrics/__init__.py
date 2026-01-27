@@ -9,8 +9,8 @@ from .cpu.betti1_variation_index import Betti1VariationIndex
 from .cpu.euler_charac_abs_ratio import EulerCharaJaccardsRatio
 from .cpu.euler_charac_relative_error import EulerCharacRelativeError
 from .cpu.euler_charac_variation_index import EulerCharacVariationIndex
-from .cpu.persistence_bottleneck import PeristenceBottleneck
-from .cpu.persistence_wasserstein import PeristenceWasserstein
+# from .cpu.persistence_bottleneck import PeristenceBottleneck
+# from .cpu.persistence_wasserstein import PeristenceWasserstein
 from .cpu.variation_of_information import VI
 from .gpu.avg_centerline_distance import AverageCenterlineDistance
 from .gpu.betti0_ratio_gpu import Betti0JaccardRatioGPU
@@ -62,8 +62,8 @@ METRIC_FACTORIES = {
     "euler_charac_jaccard_ratio": EulerCharaJaccardsRatio,
     "euler_charac_relative_error": EulerCharacRelativeError,
     "euler_charac_variation_index": EulerCharacVariationIndex,
-    "persistence_bottleneck": PeristenceBottleneck,
-    "persistence_wasserstein": PeristenceWasserstein
+    # "persistence_bottleneck": PeristenceBottleneck,
+    # "persistence_wasserstein": PeristenceWasserstein
 }
 
 

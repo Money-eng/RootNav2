@@ -3,6 +3,7 @@ import functools
 
 from torch.optim import SGD
 from torch.optim import Adam
+from torch.optim import AdamW
 from torch.optim import ASGD
 from torch.optim import Adamax
 from torch.optim import Adadelta
@@ -11,6 +12,7 @@ from torch.optim import RMSprop
 
 key2opt =  {'sgd': SGD,
             'adam': Adam,
+            'adamw': AdamW,
             'asgd': ASGD,
             'adamax': Adamax,
             'adadelta': Adadelta,
