@@ -30,7 +30,8 @@ from rootnav2.loss import get_loss_function
 from Metrics.gpu.haussdorff import HausdorffDistance
 from Metrics.gpu.precision import Precision
 from Metrics.gpu.recall import Recall
-from Metrics.gpu.f1_score import F1Score
+from Metrics.gpu.f_beta_score import FBetaScore
+from Metrics.gpu.nomalized_surface_distance import NormalizedSurfaceDistance
 from Metrics.gpu.iou import MeanIoU
 from Metrics.gpu.avg_centerline_distance import AverageCenterlineDistance
 from Metrics.gpu.betti1_abs_err import Betti1AbsErrGPU
@@ -120,19 +121,20 @@ def train(args):
     running_metrics_val = runningScore(n_classes)
 
     binary_metrics = {
-        # "Hausdorff": HausdorffDistance(),
-        # "Hausdorff95": HausdorffDistance95(),
+        "Hausdorff": HausdorffDistance(),
+        "Hausdorff95": HausdorffDistance95(),
         "Precision": Precision(),
         "Recall": Recall(),
-        # "F1_Score": F1Score(),
         "Dice": Dice(),
-        # "CL_Dice": CLDice(),
+        "CL_Dice": CLDice(),
         "Focal_loss": FocalLoss(),
-        # "IoU_Binary": MeanIoU(),
-        # "Betti0_abs": Betti0AbsErrGPU(),
-        # "Betti1_abs": Betti1AbsErrGPU(),
-        # "Normalized_Mutual_Info": NormalizedMutualInformation(),
-        # "CenterlineDist": AverageCenterlineDistance(threshold=0.5)
+        "IoU_Binary": MeanIoU(),
+        "Betti0_abs": Betti0AbsErrGPU(),
+        "Betti1_abs": Betti1AbsErrGPU(),
+        "Normalized_Mutual_Info": NormalizedMutualInformation(),
+        "CenterlineDist": AverageCenterlineDistance(threshold=0.5),
+        "F2_Score": FBetaScore(beta=2.0),
+        "NSD": NormalizedSurfaceDistance()
     }
 
     model = hg()

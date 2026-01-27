@@ -22,11 +22,12 @@ def _betti1_abs_err(prediction_torch, mask_torch):
 class Betti1AbsErrGPU(BaseMetric):
     type = "gpu"
 
-    def __init__(self):
+    def __init__(self, threshold: float = 0.5):
         super().__init__()
+        self.threshold = threshold
 
     def is_better(self, old_score: float, new_score: float) -> bool:
         return new_score > old_score
 
     def __call__(self, prediction: torch.Tensor, mask: torch.Tensor) -> float:
-        return _betti1_abs_err(prediction, mask)
+        return _betti1_abs_err(prediction=(prediction > self.threshold).float(), mask=(mask > self.threshold).float())

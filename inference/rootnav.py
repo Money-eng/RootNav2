@@ -47,7 +47,7 @@ if __name__ == '__main__':
     
     
     # ######################################"
-    MY_WEIGHTS_PATH = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/runs/root_train/22219/HG_roots_epoch_1500.pkl"
+    MY_WEIGHTS_PATH = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/runs/root_train_dice/26331/HG_roots_epoch_6500.pkl"
     args = parser.parse_args([input_dir, output_dir, '--debug', '--model', MY_WEIGHTS_PATH, '--segmentation_images'])
     # Title
     logger.info("RootNav 2.1")

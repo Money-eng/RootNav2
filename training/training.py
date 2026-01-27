@@ -27,7 +27,7 @@ logger.addHandler(handler)
 
 class Args:
     def __init__(self):
-        self.config = "./training/configs/root_train_cldice.yml" 
+        self.config = "./training/configs/root_train_ce.yml" 
         
         self.output_example = True
         

@@ -9,8 +9,9 @@ from ..base import BaseMetric
 class MeanIoU(BaseMetric):
     type = "gpu"
 
-    def __init__(self):
+    def __init__(self, threshold: float = 0.5):
         super().__init__()
+        self.threshold = threshold
 
     def is_better(self, old_score: float, new_score: float) -> bool:
         """
@@ -26,8 +27,8 @@ class MeanIoU(BaseMetric):
         only sees exact 0/1 values.
         """
         # Ensure float
-        pred = prediction.int()
-        msk = mask.int()
+        pred = (prediction > self.threshold).float()
+        msk = (mask > self.threshold).float()
 
         # Compute binary Jaccard (IoU)
         score = FMF.mean_iou(pred, msk, num_classes=2)

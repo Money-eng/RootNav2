@@ -2,7 +2,6 @@ import os
 import yaml
 import copy
 import random
-import torch
 from run_training import train
 
 # --- CONFIGURATION ---
@@ -36,12 +35,21 @@ def run_random_search():
         base_config['training']['batch_size'] = 2
 
     print(f"--- Démarrage Random Search : {NUM_EXPERIMENTS} essais prévus ---")
+    
+    previous_choices = set()
 
     for i in range(1, NUM_EXPERIMENTS + 1):
         opt_name = random.choice(search_space['optimizer'])
         lr = random.choice(search_space['lr'])
         wd = random.choice(search_space['weight_decay'])
         
+        while (opt_name, lr, wd) in previous_choices:
+            opt_name = random.choice(search_space['optimizer'])
+            lr = random.choice(search_space['lr'])
+            wd = random.choice(search_space['weight_decay'])
+        
+        previous_choices.add((opt_name, lr, wd))
+
         current_config = copy.deepcopy(base_config)
         current_config['training']['optimizer']['name'] = opt_name
         current_config['training']['optimizer']['lr'] = lr

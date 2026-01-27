@@ -9,23 +9,16 @@ from ..base import BaseMetric
 class HausdorffDistance(BaseMetric):
     type = "gpu"
 
-    def __init__(self):
+    def __init__(self, threshold: float = 0.5):
         super().__init__()
+        self.threshold = threshold
 
     def is_better(self, old_score: float, new_score: float) -> bool:
-        """
-        Hausdorff distance. On considère que `old_score` et `new_score`
-        sont des scores de type float.
-        """
         return new_score < old_score
 
     def __call__(self, prediction: torch.Tensor, mask: torch.Tensor) -> float:
-        """
-        Compute the Hausdorff distance between the predicted segmentation and the ground truth mask.
-        The Hausdorff distance is defined as the maximum distance from a point in one set to the closest point in the other set.
-        """
-        pred = prediction.detach().cpu().long()
-        msk = mask.detach().cpu().long()
+        pred = (prediction > self.threshold).long()
+        msk = (mask > self.threshold).long()
 
         metric = HausdorffDistanceMetric(
             include_background=True, distance_metric="euclidean"

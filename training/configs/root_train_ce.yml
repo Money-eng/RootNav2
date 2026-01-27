@@ -11,8 +11,8 @@ training:
     print_interval: 50
     optimizer:
         name: 'rmsprop'
-        lr: 1e-4
-        weight_decay: 1e-3
+        lr: 0.0001
+        weight_decay: 0.001
         momentum: 0.9
     loss:
         name: 'cross_entropy'

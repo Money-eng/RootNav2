@@ -20,23 +20,12 @@ def _betti0_abs_err(prediction_torch, mask_torch):
 class Betti0AbsErrGPU(BaseMetric):
     type = "gpu"
 
-    def __init__(self):
+    def __init__(self, threshold: float = 0.5):
         super().__init__()
+        self.threshold = threshold
 
     def is_better(self, old_score: float, new_score: float) -> bool:
-        """
-        Jaccard Ratio of Betti-0 Characteristic (JREC) :
-        - JREC = 1 means the prediction matches the mask perfectly.
-        - The lower the JREC, the greater the difference in connected components between prediction and mask.
-        """
         return new_score > old_score
 
     def __call__(self, prediction: torch.Tensor, mask: torch.Tensor) -> float:
-        """
-        Jaccard Ratio of Betti-0 Characteristic (JREC) :
-        JREC = min(|E(pred)|, |E(mask)|) / (max(|E(pred)|, |E(mask)|) + 1e-8)
-        where E is the Betti-0 characteristic (number of connected components).
-        - JREC = 1 means the prediction matches the mask perfectly.
-        - The lower the JREC, the greater the difference in connected components between prediction and mask.
-        """
-        return _betti0_abs_err(prediction, mask)
+        return _betti0_abs_err((prediction > self.threshold).float(), (mask > self.threshold).float())
