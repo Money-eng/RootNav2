@@ -9,18 +9,17 @@ from ..base import BaseMetric
 class FBetaScore(BaseMetric):
     type = "gpu"
 
-    def __init__(self, beta: float = 2.0):
+    def __init__(self, beta: float = 2.0, threshold: float = 0.5):
         super().__init__()
         self.beta = beta
-        self.average = "micro" 
-        self.task = "binary"
+        self.threshold = threshold
 
     def is_better(self, old_score: float, new_score: float) -> bool:
         return new_score > old_score
 
     def __call__(self, prediction: torch.Tensor, mask: torch.Tensor) -> float:
-        pred = prediction.float()
-        msk = mask.float()
+        pred = (prediction > self.threshold).long()
+        msk = (mask > self.threshold).long()
 
-        score = FMF.fbeta_score(pred, msk, beta=self.beta, average=self.average, task=self.task)
+        score = FMF.fbeta_score(pred, msk, beta=self.beta, average="micro", task="binary")
         return score.mean().item()

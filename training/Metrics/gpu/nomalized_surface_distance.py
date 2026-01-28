@@ -14,8 +14,8 @@ class NormalizedSurfaceDistance(BaseMetric):
         return new_score < old_score
 
     def __call__(self, prediction: torch.Tensor, mask: torch.Tensor) -> float:
-        pred = (prediction >= self.threshold).float()
-        msk = (mask >= self.threshold).float()
+        pred = (prediction >= self.threshold).long()
+        msk = (mask >= self.threshold).long()
         
         surface_distances = compute_average_surface_distance(
             y_pred=pred,

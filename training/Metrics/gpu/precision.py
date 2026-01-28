@@ -9,8 +9,9 @@ from ..base import BaseMetric
 class Precision(BaseMetric):
     type = "gpu"
 
-    def __init__(self):
+    def __init__(self, threshold: float = 0.5):
         super().__init__()
+        self.threshold = threshold
 
     def is_better(self, old_score: float, new_score: float) -> bool:
         """
@@ -23,8 +24,8 @@ class Precision(BaseMetric):
         """
         Precision binaire : TP / (TP + FP).
         """
-        pred = prediction.float()
-        msk = mask.float()
+        pred = (prediction > self.threshold).long()
+        msk = (mask > self.threshold).long()
 
         score = FMF.precision(pred, msk, task="binary")
         return score.mean().item()

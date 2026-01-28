@@ -132,8 +132,10 @@ def train(args):
         "Betti0_abs": Betti0AbsErrGPU(),
         "Betti1_abs": Betti1AbsErrGPU(),
         "Normalized_Mutual_Info": NormalizedMutualInformation(),
-        "CenterlineDist": AverageCenterlineDistance(threshold=0.5),
+        "CenterlineDist": AverageCenterlineDistance(),
         "F2_Score": FBetaScore(beta=2.0),
+        "F3_Score": FBetaScore(beta=3.0),
+        "F4_Score": FBetaScore(beta=4.0),
         "NSD": NormalizedSurfaceDistance()
     }
 
