@@ -17,8 +17,8 @@ class HausdorffDistance(BaseMetric):
         return new_score < old_score
 
     def __call__(self, prediction: torch.Tensor, mask: torch.Tensor) -> float:
-        pred = (prediction > self.threshold).long()
-        msk = (mask > self.threshold).long()
+        pred = (prediction > self.threshold).detach().cpu().long()
+        msk = (mask > self.threshold).detach().cpu().long()
 
         metric = HausdorffDistanceMetric(
             include_background=True, distance_metric="euclidean"

@@ -4,7 +4,7 @@ data:
     dataset: roots # "roots" is currently the only dataset supported and represents image/rsml pairs
     path: ./training/data 
 training:
-    train_iters: 25000000
+    train_iters: 100000
     batch_size: 32   # (for two GPUs) change according to your GPU
     val_interval: 100
     n_workers: 6    # (for two GPUs) change according to your GPU
@@ -22,6 +22,9 @@ training:
         hflip: 0.5
 
     lr_schedule:
+        name: multi_step
+        milestones: [3500, 7000, 10500, 14000]
+        gamma: 0.5
     resume: #../inference/models/wheat_bluepaper.pth
             # (can use the trained model from inference section)
 testing:

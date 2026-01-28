@@ -180,6 +180,17 @@ def train(args):
     cldice_criterion = HybridMultiClassCLDiceLoss(iter_=3, alpha=0.5, smooth=1., weights=class_weights.tolist(), root_indices=[IDX_LATERAL, IDX_PRIMARY], reduction='mean').to(device)
     
     mse_criterion = torch.nn.MSELoss(reduction='mean').to(device)
+    
+    loss_name = cfg['training']['loss']['name']
+    if loss_name == 'cross_entropy':
+        logger.info("Using Cross Entropy Loss")
+        loss = ce_criterion
+    elif loss_name == 'dice':
+        logger.info("Using Dice Loss")
+        loss = dice_criterion
+    elif loss_name == 'cldice_dice':
+        logger.info("Using CLDice + Dice Loss")
+        loss = cldice_criterion
 
     while i <= cfg['training']['train_iters'] and flag:
         for (images, labels, hm) in trainloader:
@@ -194,14 +205,11 @@ def train(args):
             out_main = outputs[-1]
             
             optimizer.zero_grad()
-            # loss1 = dice_criterion(input=out_main, target=labels.unsqueeze(1))
-            
-            # loss1 = ce_criterion(input=out_main, target=labels)
             
             probs = torch.softmax(out_main, dim=1)
             target_one_hot = torch.nn.functional.one_hot(labels, num_classes=6)
             target_one_hot = target_one_hot.permute(0, 3, 1, 2).float().to(device)
-            loss1 = cldice_criterion(y_true=target_one_hot, y_pred=probs)
+            loss1 = loss(y_true=target_one_hot, y_pred=probs)
             
             out5 = out_main[:,5:6,:,:] 
             out4 = out_main[:,4:5,:,:]
@@ -213,14 +221,13 @@ def train(args):
             loss1.backward(retain_graph=True)
             loss2.backward()
             optimizer.step()
-            scheduler.step()
-
+            
             time_meter.update(time.time() - start_ts)
 
             if (i + 1) % cfg['training']['print_interval'] == 0:
                 logger.info("Iter [{:d}/{:d}] Loss: {:.4f} Time/Image: {:.4f}".format(
                     i + 1, cfg['training']['train_iters'], loss1.item(), time_meter.avg / cfg['training']['batch_size']))
-                writer.add_scalar('loss/train_loss_ce', loss1.item(), i+1)
+                writer.add_scalar(f'loss/train_loss_seg_{loss_name}', loss1.item(), i+1)
                 writer.add_scalar('loss/train_loss_mse', loss2.item(), i+1)
                 time_meter.reset()
 
