@@ -151,11 +151,12 @@ def train(args):
 
     start_iter = 0
     if cfg['training']['resume'] is not None and os.path.isfile(cfg['training']['resume']):
-         checkpoint = torch.load(cfg['training']['resume'])
-         model.load_state_dict(checkpoint["model_state"])
-         optimizer.load_state_dict(checkpoint["optimizer_state"])
-         scheduler.load_state_dict(checkpoint["scheduler_state"])
-         start_iter = checkpoint["epoch"]
+        checkpoint = torch.load(cfg['training']['resume'])
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+        scheduler.load_state_dict(checkpoint["scheduler_state"])
+        
+        start_iter = checkpoint.get("iter", checkpoint.get("epoch", 0))
 
     val_loss_seg_meter_ce = averageMeter()
     val_loss_seg_meter_dice = averageMeter()
@@ -170,15 +171,23 @@ def train(args):
     ce_criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 
     dice_criterion = DiceLoss(
-    weight=class_weights,
+        #weight=class_weights, bad idea
         to_onehot_y=True,
-        softmax=True,
+        softmax=True, # transform logits to probs
         reduction='mean'
     ).to(device)
     
-    # root diamter is 5 pixels -> iter = 3
-    cldice_criterion = HybridMultiClassCLDiceLoss(iter_=3, alpha=0.5, smooth=1., weights=class_weights.tolist(), root_indices=[IDX_LATERAL, IDX_PRIMARY], reduction='mean').to(device)
-    
+    cldice_criterion = HybridMultiClassCLDiceLoss(
+        iter_=3, 
+        alpha=0.5, 
+        smooth=1.
+    ).to(device)
+    #ProjectedCLDiceLoss(
+    #     iter_=3, 
+    #     alpha=0.5, 
+    #     smooth=1.
+    # ).to(device)
+        
     mse_criterion = torch.nn.MSELoss(reduction='mean').to(device)
     
     loss_name = cfg['training']['loss']['name']
@@ -206,10 +215,17 @@ def train(args):
             
             optimizer.zero_grad()
             
-            probs = torch.softmax(out_main, dim=1)
-            target_one_hot = torch.nn.functional.one_hot(labels, num_classes=6)
-            target_one_hot = target_one_hot.permute(0, 3, 1, 2).float().to(device)
-            loss1 = loss(y_true=target_one_hot, y_pred=probs)
+            if loss_name == 'cross_entropy':
+                loss1 = loss(input=out_main, target=labels)
+
+            elif loss_name == 'dice':
+                loss1 = loss(input=out_main, target=labels.unsqueeze(1))
+            else:
+                probs = torch.softmax(out_main, dim=1)
+                target_one_hot = torch.nn.functional.one_hot(labels, num_classes=6)
+                target_one_hot = target_one_hot.permute(0, 3, 1, 2).float().to(device)
+                
+                loss1 = loss(y_true=target_one_hot, y_pred=probs)
             
             out5 = out_main[:,5:6,:,:] 
             out4 = out_main[:,4:5,:,:]
@@ -344,19 +360,27 @@ def train(args):
                 val_loss_mse_meter.reset()
                 running_metrics_val.reset()
 
+                current_real_epoch = (i + 1) // len(trainloader)
+                
                 state = {
-                    "epoch": i + 1,
+                    "iter": i,
+                    "epoch": current_real_epoch,
                     "model_state": model.state_dict(),
                     "optimizer_state": optimizer.state_dict(),
                     "scheduler_state": scheduler.state_dict(),
                     "best_iou": best_iou,
                 }
                 
-                save_name = "{}_{}_epoch_{}.pkl".format(cfg['model']['arch'], cfg['data']['dataset'], i + 1)
+                # save_name = "{}_{}_epoch_{}.pkl".format(cfg['model']['arch'], cfg['data']['dataset'], current_real_epoch)
+                # save_path = os.path.join(logdir, save_name)
+                # torch.save(state, save_path)
+                # logger.info(f"Checkpoint saved: {save_path}")
+
+                save_name = "{}_{}_iter_{}.pkl".format(cfg['model']['arch'], cfg['data']['dataset'], i+1)
                 save_path = os.path.join(logdir, save_name)
                 torch.save(state, save_path)
                 logger.info(f"Checkpoint saved: {save_path}")
-
+                
                 if score['miou'] >= best_iou:
                     best_iou = score['miou']
                     state["best_iou"] = best_iou

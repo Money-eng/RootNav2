@@ -10,7 +10,7 @@ from typing import List, Dict
 
 import os
 
-import rsml
+import openalea.rsml
 import tifffile
 
 

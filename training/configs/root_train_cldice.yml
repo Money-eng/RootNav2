@@ -10,9 +10,10 @@ training:
     n_workers: 6    # (for two GPUs) change according to your GPU
     print_interval: 50
     optimizer:
-        lr: 0.0001
-        name: adam
-        weight_decay: 0.00001
+        lr: 5.0e-05
+        momentum: 0.8
+        name: rmsprop
+        weight_decay: 0.001
     loss:
         name: 'cldice_dice'
         size_average: False

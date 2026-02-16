@@ -27,5 +27,5 @@ class Precision(BaseMetric):
         pred = (prediction > self.threshold).long()
         msk = (mask > self.threshold).long()
 
-        score = FMF.precision(pred, msk, task="binary")
+        score = FMF.precision(pred, msk, task="binary", average="micro")
         return score.mean().item()

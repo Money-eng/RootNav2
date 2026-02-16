@@ -6,8 +6,10 @@ from run_training import train
 
 # --- CONFIGURATION ---
 NUM_EXPERIMENTS = 50
-TEST_ITERS = 1000
-BASE_CONFIG_FILE = "./training/configs/root_train_ce.yml"
+TEST_ITERS = 750
+BASE_CONFIG_FILE = "./training/configs/root_train_cldice.yml"
+
+random.seed(5842) 
 
 search_space = {
     'lr': [5e-4, 1e-4, 5e-5, 1e-5, 5e-6],

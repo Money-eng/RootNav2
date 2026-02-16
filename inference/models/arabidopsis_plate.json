@@ -33,21 +33,29 @@
         "multi-plant": true,
         "network": {
             "architecture": "hg",
-            "weights": "arabidopsis_plate.pth",
+            "weights": "HG_roots_epoch_13500.pkl",
             "url":"https://cvl.cs.nott.ac.uk/resources/trainedmodels/arabidopsis_plate-ea874d94.pth",
-            "scale": 1,
+            "scale": 0.00392156862,
             "input-size": 1024,
             "output-size": 512,
             "channel-bindings": {
-                "segmentation": { "Background": 0, "Primary": 1, "Lateral": 3 },
-                "heatmap": { "Seed": 5, "Primary": 2, "Lateral": 4 }
+                "segmentation": { 
+                    "Background": 0, 
+                    "Lateral": 1, 
+                    "Primary": 3 
+                },
+                "heatmap": { 
+                    "Seed": 2, 
+                    "Primary": 4, 
+                    "Lateral": 5 
+                }
             }
         },
         "pathing": {
-            "rtree-threshold": 36,
+            "rtree-threshold": 33,
             "nms-threshold": 0.9,
-            "max-primary-distance": 200,
-            "max-lateral-distance": 200,
+            "max-primary-distance": 80,
+            "max-lateral-distance": 80,
             "spline-config": {
                 "primary": { "tension": 0.5, "spacing": 50 },
                 "lateral": { "tension": 0.5, "spacing": 20 }

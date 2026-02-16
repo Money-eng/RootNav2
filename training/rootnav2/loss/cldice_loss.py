@@ -2,6 +2,41 @@ import torch
 import torch.nn as nn
 from .cldice import soft_dice, soft_dice_cldice
 
+class ProjectedCLDiceLoss(nn.Module):
+    def __init__(self, iter_=3, alpha=0.5, smooth=1., exclude_background=False):
+        super(ProjectedCLDiceLoss, self).__init__()
+        self.iter = iter_
+        self.alpha = alpha
+        self.smooth = smooth
+        
+        self.groups = {
+            'roots': [1, 2],
+            'seed': [3],
+            'tips': [4, 5] 
+        }
+        
+        self.cldice_fn = soft_dice_cldice(iter_=iter_, alpha=alpha, smooth=smooth, exclude_background=exclude_background)
+
+    def forward(self, y_true, y_pred):
+        pred_channels = []
+        true_channels = []
+
+        for _, indices in self.groups.items():
+            p_proj = y_pred[:, indices, :, :].sum(dim=1, keepdim=True) # debatable
+            t_proj = y_true[:, indices, :, :].sum(dim=1, keepdim=True)
+            
+            pred_channels.append(p_proj)
+            true_channels.append(t_proj)
+
+        y_pred_projected = torch.cat(pred_channels, dim=1)
+        y_true_projected = torch.cat(true_channels, dim=1)
+        
+        y_pred_projected = torch.clamp(y_pred_projected, 0, 1)
+        y_true_projected = torch.clamp(y_true_projected, 0, 1)
+
+        loss = self.cldice_fn(y_true_projected, y_pred_projected)
+        return loss
+
 class HybridMultiClassCLDiceLoss(nn.Module):
     def __init__(self, iter_=3, alpha=0.5, smooth=1., weights=None, root_indices=None, reduction='mean'):
         super(HybridMultiClassCLDiceLoss, self).__init__()

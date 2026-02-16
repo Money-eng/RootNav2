@@ -8,6 +8,9 @@ training/runs/*
 *.pt
 runs/
 *.log
-
+temp/
+*.pkl
+test_output/
+*.png
 exploded_data/
 data/

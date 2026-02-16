@@ -65,7 +65,7 @@ if __name__ == '__main__':
     # list files that ends with .pkl in the given model directory
     weights_path = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/inference/models/"
     weights_files = [f for f in os.listdir(weights_path) if f.endswith('.pkl')]
-    weights_files = sorted(weights_files, key=lambda x: os.path.getmtime(os.path.join(weights_path, x)), reverse=False)
+    weights_files = sorted(weights_files, key=lambda x: os.path.getmtime(os.path.join(weights_path, x)), reverse=True)
     
     
     try:
