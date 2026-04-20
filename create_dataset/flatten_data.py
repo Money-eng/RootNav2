@@ -2,7 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
-def flatten_dataset(source_dir, target_dir, method='symlink'):
+def flatten_dataset(source_dir, target_dir):
     source_path = Path(source_dir).resolve()
     target_path = Path(target_dir).resolve()
     
@@ -11,7 +11,7 @@ def flatten_dataset(source_dir, target_dir, method='symlink'):
     for split in splits:
         split_src = source_path / split
         if not split_src.exists():
-            print(f"Info: Split '{split}' non trouvé dans la source, on passe.")
+            print(f"Info: Split '{split}' between {source_path} does not exist. Skipping.")
             continue
             
         split_dst = target_path / split
@@ -56,9 +56,9 @@ def flatten_dataset(source_dir, target_dir, method='symlink'):
                 except Exception as e:
                     print(f"Erreur sur {unique_id}: {e}")
 
-        print(f" -> {processed_count} paires (image/rsml) traitées dans '{split}'")
+        print(f" -> {processed_count} time serie images processed in split '{split}'.")
 
 if __name__ == "__main__":
-    input =  "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/create_dataset/exploded_data"
-    output = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/data"
-    flatten_dataset(input, output, 'copy')
+    input =  "" # path
+    output = "" # path
+    flatten_dataset(input, output)

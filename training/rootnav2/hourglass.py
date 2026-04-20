@@ -213,9 +213,6 @@ class HourglassNet(nn.Module):
         x= self.tail_deconv2(x)
         x = self.tail_bn2(x)
 
-
- 
-
         for i in range(self.num_stacks):
             y = self.hg[i](x)
             y = self.res[i](y)

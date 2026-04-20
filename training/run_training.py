@@ -17,6 +17,7 @@ from rootnav2.metrics import runningScore, averageMeter
 from rootnav2.schedulers import get_scheduler
 from rootnav2.optimizers import get_optimizer
 from PIL import Image
+import wandb
 
 from torch.utils.tensorboard import SummaryWriter
 import logging
@@ -24,30 +25,33 @@ import logging
 # Loss functions
 from monai.losses import DiceLoss
 from rootnav2.loss.cldice_loss import HybridMultiClassCLDiceLoss
-from rootnav2.loss import get_loss_function
 
 # Metrics
-from Metrics.gpu.haussdorff import HausdorffDistance
-from Metrics.gpu.precision import Precision
-from Metrics.gpu.recall import Recall
-from Metrics.gpu.f_beta_score import FBetaScore
-from Metrics.gpu.nomalized_surface_distance import NormalizedSurfaceDistance
-from Metrics.gpu.iou import MeanIoU
-from Metrics.gpu.avg_centerline_distance import AverageCenterlineDistance
-from Metrics.gpu.betti1_abs_err import Betti1AbsErrGPU
-from Metrics.gpu.betti0_abs_err import Betti0AbsErrGPU
-from Metrics.gpu.cldice import CLDice
-from Metrics.gpu.dice import Dice
-from Metrics.gpu.focal import FocalLoss
-from Metrics.gpu.haussdorff_95 import HausdorffDistance95
-from Metrics.gpu.mutual_information import NormalizedMutualInformation
+from training.Metrics.haussdorff import HausdorffDistance
+from training.Metrics.precision import Precision
+from training.Metrics.recall import Recall
+from training.Metrics.specificity import Specificity
+from training.Metrics.f1_score import F1Score
+from training.Metrics.f_beta_score import FBetaScore
+from training.Metrics.iou import IoU
+from training.Metrics.mean_iou import MeanIoU
+from training.Metrics.avg_centerline_distance import AverageSymetricCenterlineDistance
+from training.Metrics.betti1_abs_err import Betti1AbsErrGPU
+from training.Metrics.betti0_abs_err import Betti0AbsErrGPU
+from training.Metrics.betti0_variation_index_gpu import Betti0VariationIndexGPU
+from training.Metrics.betti1_variation_index_gpu import Betti1VariationIndexGPU
+from training.Metrics.cldice import CLDice
+from training.Metrics.dice import Dice
+from training.Metrics.haussdorff_95 import HausdorffDistance95
 
-weights = [0.0007,1.6246,0.7223,0.1789,1.748,12.9261] # [Background, Lateral Root, Primary Root, Seed, Primary Heatmap, Lateral Heatmap]
+weights = [0.0043, 1.2419, 0.837, 0.5495, 4.2761, 5.1519] # [Background, Lateral, Lateral Tip, Primary, Primary Tip, Seed] class weights computed with median frequency balancing on the training set. See
 
-ALL_IDX = ["Background", "Lateral Root", "Primary Root", "Seed", "Primary Heatmap", "Lateral Heatmap"]
 IDX_BACKGROUND = 0
 IDX_LATERAL = 1
-IDX_PRIMARY = 2
+IDX_LATERAL_TIP = 2
+IDX_PRIMARY = 3
+IDX_PRIMARY_TIP = 4
+IDX_SEED = 5
 
 def extract_url_from_json(json_file_path):
     with open(json_file_path, 'r') as file:
@@ -79,6 +83,14 @@ def train(args):
     logdir = os.path.join('runs', os.path.basename(args.config)[:-4] , str(run_id))
     
     writer = SummaryWriter(log_dir=logdir)
+    wandb.init(
+        entity='lgand-universit-de-montpellier',
+        project="rootNav_logs",
+        name=f"run_{run_id}_cfg_{os.path.basename(args.config)[:-4]}",
+        config=cfg,
+        #sync_tensorboard=True
+    )
+    
     logger = logging.getLogger()
 
     ts = str(datetime.datetime.now()).split('.')[0].replace(" ", "_").replace(":", "_").replace("-","_")
@@ -125,18 +137,20 @@ def train(args):
         "Hausdorff95": HausdorffDistance95(),
         "Precision": Precision(),
         "Recall": Recall(),
+        "Specificity": Specificity(),
         "Dice": Dice(),
-        "CL_Dice": CLDice(),
-        "Focal_loss": FocalLoss(),
-        "IoU_Binary": MeanIoU(),
+        "CLDice": CLDice(),
+        "IoU": IoU(),
+        "Mean_IoU": MeanIoU(),
         "Betti0_abs": Betti0AbsErrGPU(),
         "Betti1_abs": Betti1AbsErrGPU(),
-        "Normalized_Mutual_Info": NormalizedMutualInformation(),
-        "CenterlineDist": AverageCenterlineDistance(),
+        "Betti0_var_index": Betti0VariationIndexGPU(),
+        "Betti1_var_index": Betti1VariationIndexGPU(),
+        "ASCD": AverageSymetricCenterlineDistance(),
+        "F1_Score": F1Score(),
         "F2_Score": FBetaScore(beta=2.0),
         "F3_Score": FBetaScore(beta=3.0),
         "F4_Score": FBetaScore(beta=4.0),
-        "NSD": NormalizedSurfaceDistance()
     }
 
     model = hg()
@@ -180,13 +194,9 @@ def train(args):
     cldice_criterion = HybridMultiClassCLDiceLoss(
         iter_=3, 
         alpha=0.5, 
-        smooth=1.
+        smooth=1.,
+        root_indices=[IDX_LATERAL, IDX_PRIMARY],
     ).to(device)
-    #ProjectedCLDiceLoss(
-    #     iter_=3, 
-    #     alpha=0.5, 
-    #     smooth=1.
-    # ).to(device)
         
     mse_criterion = torch.nn.MSELoss(reduction='mean').to(device)
     
@@ -233,7 +243,6 @@ def train(args):
             tips = torch.cat((out2, out4,  out5), 1)
             loss2 = mse_criterion(input=tips, target=hm)
             
-
             loss1.backward(retain_graph=True)
             loss2.backward()
             optimizer.step()
@@ -245,6 +254,12 @@ def train(args):
                     i + 1, cfg['training']['train_iters'], loss1.item(), time_meter.avg / cfg['training']['batch_size']))
                 writer.add_scalar(f'loss/train_loss_seg_{loss_name}', loss1.item(), i+1)
                 writer.add_scalar('loss/train_loss_mse', loss2.item(), i+1)
+                
+                wandb.log({
+                    f"Train/Loss_Seg_{loss_name}": loss1.item(),
+                    "Train/Loss_MSE": loss2.item(),
+                }, step=i+1)
+                
                 time_meter.reset()
 
             if (i + 1) % cfg['training']['val_interval'] == 0 or (i + 1) == cfg['training']['train_iters']:
@@ -252,24 +267,17 @@ def train(args):
                 logger.info("Validation:")
                 
                 
-                target_categories = {
-                    'Lateral': IDX_LATERAL,       # 1
-                    'Primary': IDX_PRIMARY        # 2
-                }
-
                 cat_meters = {
-                    name: {k: averageMeter() for k in binary_metrics.keys()} 
-                    for name in target_categories.keys()
+                    'Binary': {k: averageMeter() for k in binary_metrics.keys()}
                 }
-                cat_meters['Binary'] = {k: averageMeter() for k in binary_metrics.keys()}
-                
+                                
                 val_loss_seg_meter_ce.reset()
                 val_loss_seg_meter_dice.reset()
                 val_loss_seg_meter_cldice.reset()
                 val_loss_mse_meter.reset()
                 running_metrics_val.reset()
                 
-                with torch.no_grad():
+                with torch.inference_mode():
                     val_loader_iter = tqdm(valloader, desc="Validation", unit="batch")
                     for images_val, labels_val, hm in val_loader_iter:
                         images_val = images_val.to(device)
@@ -293,19 +301,13 @@ def train(args):
                         val_loss_mse_meter.update(val_loss2.item())
 
                         val_loader_iter.set_postfix({'val_loss_seg_ce': val_loss_seg_meter_ce.avg, 'val_loss_seg_dice': val_loss_seg_meter_dice.avg, 'val_loss_seg_cldice': val_loss_seg_meter_cldice.avg, 'val_loss_mse': val_loss_mse_meter.avg})
-                        pred_cls = outputs1.data.max(1)[1] # [Batch, H, W] (Indices 0-5)
+                        pred_cls = outputs1.data.max(1)[1] # compute the argmax to get predicted class indices for each pixel
                         pred_cls_np = pred_cls.cpu().numpy()
                         gt_np = labels_val.data.cpu().numpy()
                         running_metrics_val.update(gt_np, pred_cls_np)
                         
                         
                         batch_masks = {}
-                       
-                        # Background (0), Lateral (1), Primary (2)
-                        for name, idx in target_categories.items():
-                            pred_mask = (pred_cls == idx).float().unsqueeze(1)
-                            gt_mask   = (labels_val == idx).float().unsqueeze(1)
-                            batch_masks[name] = (pred_mask, gt_mask)
 
                         pred_comb = ((pred_cls == IDX_LATERAL) | (pred_cls == IDX_PRIMARY)).float().unsqueeze(1)
                         gt_comb   = ((labels_val == IDX_LATERAL) | (labels_val == IDX_PRIMARY)).float().unsqueeze(1)
@@ -326,33 +328,51 @@ def train(args):
                                     pass
 
                 val_loader_iter.close()
+                
+                wandb_logs = {}
+                
                 writer.add_scalar('loss/val_loss_seg_ce', val_loss_seg_meter_ce.avg, i+1)
                 writer.add_scalar('loss/val_loss_seg_dice', val_loss_seg_meter_dice.avg, i+1)
                 writer.add_scalar('loss/val_loss_seg_cldice', val_loss_seg_meter_cldice.avg, i+1)
                 writer.add_scalar('loss/val_loss_mse', val_loss_mse_meter.avg, i+1)
+                
+                wandb_logs["Val_Loss/CE"] = val_loss_seg_meter_ce.avg
+                wandb_logs["Val_Loss/Dice"] = val_loss_seg_meter_dice.avg
+                wandb_logs["Val_Loss/CLDice"] = val_loss_seg_meter_cldice.avg
+                wandb_logs["Val_Loss/MSE"] = val_loss_mse_meter.avg
+                
                 score, class_iou = running_metrics_val.get_scores()
                 
                 cat_meters['Multi-Class'] = {}
                 for key, value in score.items():
                     logger.info(f"{key}: {value:.4f}")
                     writer.add_scalar(f'val_multi_class/{key}', value, i+1)
+                    
+                    wandb_logs[f"Val_MultiClass/{key}"] = value
+                    
                     cat_meters['Multi-Class'][key] = averageMeter()
                     cat_meters['Multi-Class'][key].update(value)
                     
                 for key, value in class_iou.items():
                     logger.info(f"Class {key} IoU: {value:.4f}")
                     writer.add_scalar(f'val_class_iou/class_{key}_iou', value, i+1)
+                    
+                    wandb_logs[f"Val_Class_IoU/Class_{key}_IoU"] = value
+                    
                     cat_meters['Multi-Class'][f'class_{key}_iou'] = averageMeter()
                     cat_meters['Multi-Class'][f'class_{key}_iou'].update(value)
                 
-                display_order = ['Primary', 'Lateral', 'Binary', "Multi-Class"]
+                display_order = ['Binary', "Multi-Class"] # 'Primary', 'Lateral'
                 for cat in display_order:
                     logger.info(f"--- {cat} Segmentation Metrics ---")
                     for key, meter in cat_meters[cat].items():
                         logger.info(f"{key}: {meter.avg:.4f}")
                         writer.add_scalar(f'val_{cat}/{key}', meter.avg, i+1)
+                        
+                        wandb_logs[f"Val_{cat}/{key}"] = meter.avg
 
                 logger.info("-----------------------------------")
+                wandb.log(wandb_logs, step=i+1)
                 
                 val_loss_seg_meter_ce.reset()
                 val_loss_seg_meter_dice.reset()
@@ -370,11 +390,6 @@ def train(args):
                     "scheduler_state": scheduler.state_dict(),
                     "best_iou": best_iou,
                 }
-                
-                # save_name = "{}_{}_epoch_{}.pkl".format(cfg['model']['arch'], cfg['data']['dataset'], current_real_epoch)
-                # save_path = os.path.join(logdir, save_name)
-                # torch.save(state, save_path)
-                # logger.info(f"Checkpoint saved: {save_path}")
 
                 save_name = "{}_{}_iter_{}.pkl".format(cfg['model']['arch'], cfg['data']['dataset'], i+1)
                 save_path = os.path.join(logdir, save_name)
@@ -396,25 +411,11 @@ def train(args):
                     example_path = os.path.join(logdir, 'validation_example.png')
                     decoded.save(example_path)
                     
-                    # from torchvision.utils import save_image
-                    # temp_dir = os.path.join(logdir, 'temp_viz')
-                    # os.makedirs(temp_dir, exist_ok=True)
-
-                    # img_tensor = images_val[0].cpu().float()
-                    # save_path_input = os.path.join(temp_dir, f'epoch_{i+1}_input.png')
-                    # save_image(img_tensor, save_path_input)
-                    # gt_numpy = labels_val[0].cpu().numpy().astype(np.uint8)
-                    # try:
-                    #     decoded_gt = decode_segmap(gt_numpy, channel_bindings)
-                    #     im_gt = Image.fromarray(decoded_gt, 'RGBA')
-                    #     im_gt.save(os.path.join(temp_dir, f'epoch_{i+1}_ground_truth.png'))
-                    # except Exception as e:
-                    #     logger.warning(f"Erreur lors du décodage du GT: {e}")
-
-                    # logger.info(f"Visualisation sauvegardée dans : {temp_dir}")
+                    wandb.log({"Validation/Prediction_Example": wandb.Image(example_path)}, step=i+1)
 
             if (i + 1) == cfg['training']['train_iters']:
                 flag = False
                 break
 
     file_handler.close()
+    wandb.finish()

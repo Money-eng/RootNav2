@@ -53,22 +53,21 @@ def run_rootnav(model_data, use_cuda, args, input_dir, output_dir):
             sys.stdout.flush()
 
             pil_img = Image.open(file)
-
             logger.debug(f"Read image, size {pil_img.size}, format {pil_img.mode}")
 
             if (pil_img.mode != "RGB"):
                 pil_img = pil_img.convert("RGB")
                 logger.debug(f"Converting image to RGB")
 
-            ####################### RESIZE #########################################
+            ####################### RESIZE ######################################### 
             realw, realh = pil_img.size
-            realw = float(realw)
-            realh = float(realh)
+            realw = float(realh)
+            realh = float(realw)
             factor1 = realh / 512.0
             factor2 = realw / 512.0
 
-            resized_img = np.array(pil_img.resize((net_output_size, net_output_size),resample=BICUBIC)) # Resize to network output size for CRF processing
-            img = np.array(pil_img.resize((net_input_size, net_input_size))) # Resize to network input size for network processing
+            resized_img = np.array(pil_img.resize((net_output_size, net_output_size),resample=BICUBIC)) 
+            img = np.array(pil_img.resize((net_input_size, net_input_size))) 
 
             logger.debug(f"Resizing image to {net_input_size}x{net_input_size}")  
 
@@ -116,7 +115,7 @@ def run_rootnav(model_data, use_cuda, args, input_dir, output_dir):
             
             heatmap_points = {}
             for idx, binding_key in enumerate(heatmap_index):
-                heatmap_points[binding_key] = nms(heatmap_output[0][idx], 0.7)
+                heatmap_points[binding_key] = nms(heatmap_output[0][idx], threshold=pathing_config['nms-threshold'])
 
             ############################# PATH FINDING #############################
             # Filter seed and primary tip locations
@@ -166,6 +165,7 @@ def run_rootnav(model_data, use_cuda, args, input_dir, output_dir):
                 path, pid = AStar_Lat(i, lateral_goal_dict, von_neumann_neighbors, lateral_weights, pathing_config['max-lateral-distance'])
                 if path !=[]:
                     scaled_lateral_path = [(x*factor2,y*factor1) for (x,y) in reversed(path)]
+                    #scaled_lateral_path = [(c*factor2, r*factor1) for (r,c) in reversed(path)]
                     lateral_root = Root(scaled_lateral_path, spline_tension = lateral_spline_params['tension'], spline_knot_spacing = lateral_spline_params['spacing'])
                     primary_root_index[pid].roots.append(lateral_root)
                 else:

@@ -47,9 +47,11 @@ if __name__ == '__main__':
     parser.add_argument('--model', default="arabidopsis_plate", metavar='M', help="The trained model to use (default arabidopsis_plate)")
     parser.add_argument('--no_cuda', action='store_true', default=False, help='disables CUDA')
     parser.add_argument('--segmentation_images', action='store_true', default=True, help='Reduce output files to minimum')
-    parser.add_argument('--debug', action='store_true', default=True, help='Show additional debug messages')
-    parser.add_argument('input_dir', type=str, default="/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/training/data/test/", help='Input directory', nargs="?")
-    parser.add_argument('output_dir', type=str, default="/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/test_output/", help='Output directory', nargs="?")
+    parser.add_argument('--debug', action='store_true', default=False, help='Show additional debug messages')
+    
+    parser.add_argument('--weights_dir', type=str, required=True, help='Path to the directory containing .pkl weights')
+    parser.add_argument('input_dir', type=str, help='Input directory containing images')
+    parser.add_argument('output_dir', type=str, help='Output directory for results')
 
     args = parser.parse_args()
 
@@ -63,7 +65,7 @@ if __name__ == '__main__':
         logger.debug("Running in debug mode")
         
     # list files that ends with .pkl in the given model directory
-    weights_path = "/home/loai/Documents/code/RSMLExtraction/RSA_reconstruction/Method/RootNav2/inference/models/"
+    weights_path = args.weights_dir
     weights_files = [f for f in os.listdir(weights_path) if f.endswith('.pkl')]
     weights_files = sorted(weights_files, key=lambda x: os.path.getmtime(os.path.join(weights_path, x)), reverse=False)
     
@@ -95,8 +97,8 @@ if __name__ == '__main__':
         
         output_dir = ''
         if not args.output_dir:
-            logger.info("No output folder specified, will try and write output to " + args.input_dir + "_output")
-            output_dir = args.input_dir + '_output'
+            logger.info("No output folder specified, will try and write output to " + args.input_dir + "_output_cldice")
+            output_dir = args.input_dir + '_output_cldice'
         else:
             output_dir = args.output_dir + "/" + f.split('.')[0]
 

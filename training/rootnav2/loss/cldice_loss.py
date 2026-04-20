@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from .cldice import soft_dice, soft_dice_cldice
 
-class ProjectedCLDiceLoss(nn.Module):
+class ProjectedCLDiceLoss(nn.Module): # Very bad
     def __init__(self, iter_=3, alpha=0.5, smooth=1., exclude_background=False):
         super(ProjectedCLDiceLoss, self).__init__()
         self.iter = iter_

@@ -27,7 +27,7 @@ logger.addHandler(handler)
 
 class Args:
     def __init__(self):
-        self.config = "./training/configs/root_train_cldice.yml" 
+        self.config = "./training/configs/root_train_cldice.yml" # redo with other config to remake the experiment
         
         self.output_example = True
         
@@ -37,5 +37,5 @@ class Args:
 
 if __name__ == "__main__":
     args = Args()
-    print(f"Lancement de l'entraînement avec : {args.config}")
+    print(f"Launching training with config: {args.config}")
     train(args)
